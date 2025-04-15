@@ -10,6 +10,7 @@ import numpy as np
 import optuna
 import random
 import os
+import json
 
 
 class WeatherModel(nn.Module):
@@ -107,6 +108,10 @@ def train_model(model, train_loader, val_loader, num_epochs,device, learning_rat
     train_losses = []
     val_losses = []
 
+    best_val_loss = float('inf')
+    counter = 0
+    patience = 3
+
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0
@@ -140,8 +145,16 @@ def train_model(model, train_loader, val_loader, num_epochs,device, learning_rat
                 val_loss += loss.item()
 
             val_losses.append(val_loss / len(val_loader))
-            if num_epochs % 5 == 0:
-                print(f"Validation Loss: {val_losses[-1]:.4f}")
+            print(f"Validation Loss: {val_losses[-1]:.4f}")
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                counter = 0
+            else:
+                counter += 1
+                if counter >= patience:
+                    print(f"Early stopping triggered at epoch {epoch + 1}")
+                    break
 
     return model, train_losses, val_losses
 
@@ -252,6 +265,16 @@ def objective(trial):
                                    learning_rate=learning_rate)
     return val_losses[-1]
 
+def save_best_params(best_params, filename="best_params.json"):
+    with open(filename, 'w') as f:
+        json.dump(best_params, f)
+
+def load_best_params(filename="best_params.json"):
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    return None
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -269,12 +292,17 @@ def main():
         "Night Precipitation Sum [mm]"
     ]
 
-    study = optuna.create_study(direction="minimize", study_name="weather_study")
-    study.optimize(objective, n_trials=200)
+    best_params = load_best_params()
 
-    print(f"Best hyperparameters: {study.best_params}")
+    if best_params is None:
+        study = optuna.create_study(direction="minimize", study_name="weather_study")
+        study.optimize(objective, n_trials=200)
 
-    best_params = study.best_params
+        print(f"Best hyperparameters: {study.best_params}")
+
+        best_params = study.best_params
+        save_best_params(best_params)
+
     b_num_heads = best_params['num_heads']
     b_num_layers = best_params['num_layers']
     b_embed_dim = best_params['embed_dim']
