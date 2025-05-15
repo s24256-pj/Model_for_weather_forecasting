@@ -64,9 +64,6 @@ class WeatherModel(nn.Module):
 def prepare_data(data, input_seq_length, output_seq_length, batch_size, target_features):
     data = pd.read_csv(data)
     data = data.select_dtypes(include=['int', 'float'])
-    data = data.drop(columns="Average Daily Total Cloud Cover [oktas]")
-
-
     data.fillna(0, inplace=True)
 
     input_features = data.columns.tolist()
@@ -194,8 +191,14 @@ def visualisation_training(train_losses, val_losses, all_predictions, all_target
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training and Validation Loss")
+    plt.grid(True)
     plt.legend()
+    plt.tight_layout()
     plt.show()
+
+    if len(all_predictions) == 0 or len(all_targets) == 0:
+        print("No prediction data available for plotting.")
+        return
 
     all_predictions = np.concatenate(all_predictions, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)
@@ -207,38 +210,96 @@ def visualisation_training(train_losses, val_losses, all_predictions, all_target
     all_targets_rescaled = scaler_target.inverse_transform(all_targets_flat)
 
     plt.figure(figsize=(15, 8))
-    plt.plot(all_targets_rescaled[:, 1], label="Actual", color="green")
-    plt.plot(all_predictions_rescaled[:, 1], label="Predicted", linestyle="dashed", color="orange")
-    plt.ylabel("Value")
-    plt.xlabel("Time Step (all samples)")
-    plt.title("All Predictions vs Actual")
+    plt.plot(all_targets_rescaled[:, 9], label="Actual", color="green")
+    plt.plot(all_predictions_rescaled[:, 9], label="Predicted", linestyle="--", color="orange")
+    plt.ylabel("Temperature")
+    plt.xlabel("Time Step (flattened)")
+    plt.title("Predicted vs Actual (All Training Samples)")
     plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15, 8))
+    plt.plot(all_targets_rescaled[:, 0], label="Actual", color="green")
+    plt.plot(all_predictions_rescaled[:, 0], label="Predicted", linestyle="--", color="orange")
+    plt.ylabel("Stink")
+    plt.xlabel("Time Step (flattened)")
+    plt.title("Predicted vs Actual (All Training Samples)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15, 8))
+    plt.plot(all_targets_rescaled[:, 2], label="Actual", color="green")
+    plt.plot(all_predictions_rescaled[:, 2], label="Predicted", linestyle="--", color="orange")
+    plt.ylabel("PM10")
+    plt.xlabel("Time Step (flattened)")
+    plt.title("Predicted vs Actual (All Training Samples)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
     plt.show()
 
 def visualisation_test(all_predictions, all_targets, scaler_target, output_seq_len, scaler_input):
     all_predictions = np.concatenate(all_predictions, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)
 
-    all_predictions = scaler_input.inverse_transform(all_predictions.reshape(-1, all_predictions.shape[-1]))
-    all_targets = scaler_target.inverse_transform(all_targets.reshape(-1, all_targets.shape[-1]))
+    num_features = all_predictions.shape[-1]
 
-    all_predictions = all_predictions.reshape(-1, output_seq_len, 6)
-    all_targets = all_targets.reshape(-1, output_seq_len, 6)
+    all_predictions_2d = all_predictions.reshape(-1, num_features)
+    all_targets_2d = all_targets.reshape(-1, num_features)
 
-    num_samples = 1
+    all_predictions_rescaled = scaler_target.inverse_transform(all_predictions_2d)
+    all_targets_rescaled = scaler_target.inverse_transform(all_targets_2d)
 
-    plt.figure(figsize=(12, 7))
+    all_predictions_reshaped = all_predictions_rescaled.reshape(-1, output_seq_len, num_features)
+    all_targets_reshaped = all_targets_rescaled.reshape(-1, output_seq_len, num_features)
 
-    for i in range(num_samples):
-        plt.subplot(num_samples, 1, i + 1)
-        plt.plot(all_targets[i, :, 1], label="Actual", color="green")
-        plt.plot(all_predictions[i, :, 1], label="Predicted", linestyle="dashed", color="orange")
-        plt.ylabel("Value")
+    num_samples_to_plot = min(3, len(all_predictions_reshaped))
+
+    plt.figure(figsize=(12, 4 * num_samples_to_plot))
+
+    for i in range(num_samples_to_plot):
+        plt.subplot(num_samples_to_plot, 1, i + 1)
+        plt.plot(all_targets_reshaped[i, :, 0], label="Actual", color="green")
+        plt.plot(all_predictions_reshaped[i, :, 0], label="Predicted", linestyle="--", color="orange")
+        plt.ylabel("Stink")
+        plt.title(f"Test Sample {i + 1}")
+        plt.grid(True)
         plt.legend()
-        plt.title(f"Sample {i + 1}")
 
     plt.xlabel("Time Step")
+    plt.tight_layout()
     plt.show()
+
+    for i in range(num_samples_to_plot):
+        plt.subplot(num_samples_to_plot, 1, i + 1)
+        plt.plot(all_targets_reshaped[i, :, 9], label="Actual", color="green")
+        plt.plot(all_predictions_reshaped[i, :, 9], label="Predicted", linestyle="--", color="orange")
+        plt.ylabel("Temperature")
+        plt.title(f"Test Sample {i + 1}")
+        plt.grid(True)
+        plt.legend()
+
+    plt.xlabel("Time Step")
+    plt.tight_layout()
+    plt.show()
+
+    for i in range(num_samples_to_plot):
+        plt.subplot(num_samples_to_plot, 1, i + 1)
+        plt.plot(all_targets_reshaped[i, :, 2], label="Actual", color="green")
+        plt.plot(all_predictions_reshaped[i, :, 2], label="Predicted", linestyle="--", color="orange")
+        plt.ylabel("PM10")
+        plt.title(f"Test Sample {i + 1}")
+        plt.grid(True)
+        plt.legend()
+
+    plt.xlabel("Time Step")
+    plt.tight_layout()
+    plt.show()
+
 def set_seed(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -263,17 +324,11 @@ def objective(trial):
     batch_size = trial.suggest_categorical('batch_size', [32, 64])
     input_seq_length = trial.suggest_categorical('input_seq_length', [7, 14,21])
 
-    output_seq_length = 1
+    output_seq_length = 2
 
-    data = "weather_data_selected.csv"
+    data = "weather_data_two.csv"
     target_features = [
-        #"Average Daily Total Cloud Cover [oktas]",
-        "Average Daily Wind Speed [m/s]",
-        "Average Daily Temperature [°C]",
-        "Average Daily Relative Humidity [%]",
-        "Average Daily Station-Level Pressure [hPa]",
-        "Daily Precipitation Sum [mm]",
-        "Night Precipitation Sum [mm]"
+        "stink","no2","pm10","pm25","so2","o3","cloud_cover","wind_direction","wind_speed","temperature","humidity","pressure","precipitation"
     ]
     train_loader, val_loader, test_loader, X, Y, scaler_target, scaler_input= prepare_data(
         data, input_seq_length, output_seq_length, batch_size=batch_size, target_features=target_features
@@ -297,11 +352,11 @@ def objective(trial):
 
     return test_loss
 
-def save_best_params(best_params, filename="best_params.json"):
+def save_best_params(best_params, filename="best_params_t2.json"):
     with open(filename, 'w') as f:
         json.dump(best_params, f)
 
-def load_best_params(filename="best_params.json"):
+def load_best_params(filename="best_params_t2.json"):
     if os.path.exists(filename):
         with open(filename, 'r') as f:
             return json.load(f)
@@ -311,25 +366,46 @@ def main():
     set_seed()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    input_seq_length = 21
-    output_seq_length = 3
+    input_seq_length = 7
+    output_seq_length = 7
 
-    data = "weather_data_selected.csv"
+    import pandas as pd
+    import json
+
+    if not os.path.exists("weather_data_two.csv"):
+        with open("ml-report_1.json") as f:
+            data = json.load(f)
+
+        all_rows = []
+
+        for entry in data:
+            lat = entry["coordinate"]["lat"]
+            lng = entry["coordinate"]["lng"]
+            rows = entry.get("rows", [])
+
+            for row in rows:
+                row_flat = row.copy()
+                row_flat["latitude"] = lat
+                row_flat["longitude"] = lng
+                all_rows.append(row_flat)
+
+        df = pd.DataFrame(all_rows)
+
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values(["latitude", "longitude", "date"])
+
+        df.to_csv("weather_data_test.csv", index=False)
+
+    data = "weather_data_test.csv"
     target_features = [
-        #"Average Daily Total Cloud Cover [oktas]",
-        "Average Daily Wind Speed [m/s]",
-        "Average Daily Temperature [°C]",
-        "Average Daily Relative Humidity [%]",
-        "Average Daily Station-Level Pressure [hPa]",
-        "Daily Precipitation Sum [mm]",
-        "Night Precipitation Sum [mm]"
+        "stink","no2","pm10","pm25","so2","o3","cloud_cover","wind_direction","wind_speed","temperature","humidity","pressure","precipitation"
     ]
 
     best_params = load_best_params()
 
     if best_params is None:
         study = optuna.create_study(direction="minimize", study_name="weather_study")
-        study.optimize(objective, n_trials=20)
+        study.optimize(objective, n_trials=50)
 
         print(f"Best hyperparameters: {study.best_params}")
 
@@ -352,7 +428,7 @@ def main():
                              output_features=Y.shape[2], dropout=b_dropout, dim_feedforward_encoder=b_dim_feedforward_encoder,
                              dim_feedforward_decoder=b_dim_feedforward_decoder)
 
-    trained_model, train_losses, val_losses, all_targets, all_predictions = train_model(model, train_loader, val_loader, num_epochs=15, device=device, learning_rate=b_learning_rate)
+    trained_model, train_losses, val_losses, all_targets, all_predictions = train_model(model, train_loader, val_loader, num_epochs=50, device=device, learning_rate=b_learning_rate)
     test_loss, all_predictions_t, all_targets_t = evaluate_model(trained_model, test_loader, device)
     visualisation_training(train_losses, val_losses, all_predictions, all_targets, scaler_target)
     visualisation_test(all_predictions_t, all_targets_t, scaler_target,output_seq_length, scaler_input)

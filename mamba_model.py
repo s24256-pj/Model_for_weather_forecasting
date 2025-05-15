@@ -59,7 +59,6 @@ class MambaModel(nn.Module):
 def prepare_data(data, input_seq_length, output_seq_length, batch_size, target_features):
     data = pd.read_csv(data)
     data = data.select_dtypes(include=['int', 'float'])
-    data = data.drop(columns="Average Daily Total Cloud Cover [oktas]")
     data.fillna(0, inplace=True)
 
     input_features = data.columns.tolist()
@@ -177,15 +176,21 @@ def evaluate_model(model, test_loader, device):
         return test_loss, all_predictions, all_targets
 
 
-def visualisation(train_losses, val_losses, all_predictions, all_targets, scaler_target):
+def visualisation_training(train_losses, val_losses, all_predictions, all_targets, scaler_target):
     plt.figure(figsize=(10, 7))
     plt.plot(train_losses, label="Train Loss", color="blue")
     plt.plot(val_losses, label="Validation Loss", color="red")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training and Validation Loss")
+    plt.grid(True)
     plt.legend()
+    plt.tight_layout()
     plt.show()
+
+    if len(all_predictions) == 0 or len(all_targets) == 0:
+        print("No prediction data available for plotting.")
+        return
 
     all_predictions = np.concatenate(all_predictions, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)
@@ -197,12 +202,94 @@ def visualisation(train_losses, val_losses, all_predictions, all_targets, scaler
     all_targets_rescaled = scaler_target.inverse_transform(all_targets_flat)
 
     plt.figure(figsize=(15, 8))
-    plt.plot(all_targets_rescaled[:, 1], label="Actual", color="green")
-    plt.plot(all_predictions_rescaled[:, 1], label="Predicted", linestyle="dashed", color="orange")
-    plt.ylabel("Value")
-    plt.xlabel("Time Step (all samples)")
-    plt.title("All Predictions vs Actual")
+    plt.plot(all_targets_rescaled[:, 9], label="Actual", color="green")
+    plt.plot(all_predictions_rescaled[:, 9], label="Predicted", linestyle="--", color="orange")
+    plt.ylabel("Temperature")
+    plt.xlabel("Time Step (flattened)")
+    plt.title("Predicted vs Actual (All Training Samples)")
     plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15, 8))
+    plt.plot(all_targets_rescaled[:, 0], label="Actual", color="green")
+    plt.plot(all_predictions_rescaled[:, 0], label="Predicted", linestyle="--", color="orange")
+    plt.ylabel("Stink")
+    plt.xlabel("Time Step (flattened)")
+    plt.title("Predicted vs Actual (All Training Samples)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(15, 8))
+    plt.plot(all_targets_rescaled[:, 2], label="Actual", color="green")
+    plt.plot(all_predictions_rescaled[:, 2], label="Predicted", linestyle="--", color="orange")
+    plt.ylabel("PM10")
+    plt.xlabel("Time Step (flattened)")
+    plt.title("Predicted vs Actual (All Training Samples)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def visualisation_test(all_predictions, all_targets, scaler_target, output_seq_len):
+    all_predictions = np.concatenate(all_predictions, axis=0)
+    all_targets = np.concatenate(all_targets, axis=0)
+
+    num_features = all_predictions.shape[-1]
+
+    all_predictions_2d = all_predictions.reshape(-1, num_features)
+    all_targets_2d = all_targets.reshape(-1, num_features)
+
+    all_predictions_rescaled = scaler_target.inverse_transform(all_predictions_2d)
+    all_targets_rescaled = scaler_target.inverse_transform(all_targets_2d)
+
+    all_predictions_reshaped = all_predictions_rescaled.reshape(-1, output_seq_len, num_features)
+    all_targets_reshaped = all_targets_rescaled.reshape(-1, output_seq_len, num_features)
+
+    num_samples_to_plot = min(3, len(all_predictions_reshaped))
+
+    plt.figure(figsize=(12, 4 * num_samples_to_plot))
+
+    for i in range(num_samples_to_plot):
+        plt.subplot(num_samples_to_plot, 1, i + 1)
+        plt.plot(all_targets_reshaped[i, :, 0], label="Actual", color="green")
+        plt.plot(all_predictions_reshaped[i, :, 0], label="Predicted", linestyle="--", color="orange")
+        plt.ylabel("Stink")
+        plt.title(f"Test Sample {i + 1}")
+        plt.grid(True)
+        plt.legend()
+
+    plt.xlabel("Time Step")
+    plt.tight_layout()
+    plt.show()
+
+    for i in range(num_samples_to_plot):
+        plt.subplot(num_samples_to_plot, 1, i + 1)
+        plt.plot(all_targets_reshaped[i, :, 9], label="Actual", color="green")
+        plt.plot(all_predictions_reshaped[i, :, 9], label="Predicted", linestyle="--", color="orange")
+        plt.ylabel("Temperature")
+        plt.title(f"Test Sample {i + 1}")
+        plt.grid(True)
+        plt.legend()
+
+    plt.xlabel("Time Step")
+    plt.tight_layout()
+    plt.show()
+
+    for i in range(num_samples_to_plot):
+        plt.subplot(num_samples_to_plot, 1, i + 1)
+        plt.plot(all_targets_reshaped[i, :, 2], label="Actual", color="green")
+        plt.plot(all_predictions_reshaped[i, :, 2], label="Predicted", linestyle="--", color="orange")
+        plt.ylabel("PM10")
+        plt.title(f"Test Sample {i + 1}")
+        plt.grid(True)
+        plt.legend()
+
+    plt.xlabel("Time Step")
+    plt.tight_layout()
     plt.show()
 
 def set_seed(seed=42):
@@ -226,19 +313,13 @@ def objective(trial):
     kernel_size = trial.suggest_categorical('kernel_size', [3, 5])
     input_seq_length = trial.suggest_categorical('input_seq_length', [7,14,21])
 
-    output_seq_length = 1
+    output_seq_length = 2
 
-    data = "weather_data_selected.csv"
+    data = "weather_data_two.csv"
     target_features = [
-        #"Average Daily Total Cloud Cover [oktas]",
-        "Average Daily Wind Speed [m/s]",
-        "Average Daily Temperature [°C]",
-        "Average Daily Relative Humidity [%]",
-        "Average Daily Station-Level Pressure [hPa]",
-        "Daily Precipitation Sum [mm]",
-        "Night Precipitation Sum [mm]"
+        "stink","no2","pm10","pm25","so2","o3","cloud_cover","wind_direction","wind_speed","temperature","humidity","pressure","precipitation"
     ]
-    train_loader, val_loader, test_loader, X, Y, scaler_target= prepare_data(
+    train_loader, val_loader, test_loader, X, Y, scaler_target = prepare_data(
         data, input_seq_length, output_seq_length, batch_size, target_features
     )
 
@@ -256,11 +337,11 @@ def objective(trial):
 
     return test_loss
 
-def save_best_params(best_params, filename="best_params_m.json"):
+def save_best_params(best_params, filename="best_params_m1.json"):
     with open(filename, 'w') as f:
         json.dump(best_params, f)
 
-def load_best_params(filename="best_params_m.json"):
+def load_best_params(filename="best_params_m1.json"):
     if os.path.exists(filename):
         with open(filename, 'r') as f:
             return json.load(f)
@@ -271,16 +352,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    data = "weather_data_selected.csv"
-
+    data = "weather_data_test.csv"
     target_features = [
-        #"Average Daily Total Cloud Cover [oktas]",
-        "Average Daily Wind Speed [m/s]",
-        "Average Daily Temperature [°C]",
-        "Average Daily Relative Humidity [%]",
-        "Average Daily Station-Level Pressure [hPa]",
-        "Daily Precipitation Sum [mm]",
-        "Night Precipitation Sum [mm]"
+        "stink","no2","pm10","pm25","so2","o3","cloud_cover","wind_direction","wind_speed","temperature","humidity","pressure","precipitation"
     ]
 
     best_params = load_best_params()
@@ -302,19 +376,16 @@ def main():
     best_batch_size = best_params["batch_size"]
     best_learning_rate = best_params["learning_rate"]
 
-    output_seq_length = 1
+    output_seq_length = 7
 
-    train_loader, val_loader, test_loader, X, Y,scaler_target = prepare_data(
-        data, best_input_seq_length, output_seq_length, best_batch_size, target_features
-    )
+    train_loader, val_loader, test_loader, X, Y, scaler_target = prepare_data(data,best_input_seq_length,output_seq_length,best_batch_size,target_features)
 
     model = MambaModel(input_dim=X.shape[2], state_dim=best_state_dim, output_dim=Y.shape[2],dropout_rate=best_dropout,kernel_size=best_kernel).to(device)
-    trained_model, train_losses, val_losses, all_targets, all_predictions = train_model(
-        model, train_loader, val_loader, num_epochs=100, device=device, learning_rate=best_learning_rate
-    )
+
+    trained_model, train_losses, val_losses, all_targets, all_predictions = train_model(model, train_loader, val_loader, num_epochs=50, device=device, learning_rate=best_learning_rate)
     test_loss, all_predictions_t, all_targets_t = evaluate_model(trained_model, test_loader, device)
-    visualisation(train_losses, val_losses, all_predictions_t, all_targets_t, scaler_target)
-    visualisation(train_losses, val_losses, all_predictions, all_targets,scaler_target)
+    visualisation_training(train_losses, val_losses, all_predictions, all_targets, scaler_target)
+    visualisation_test(all_predictions_t, all_targets_t, scaler_target,output_seq_length)
 
 if __name__ == '__main__':
     main()
