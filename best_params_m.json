@@ -1,0 +1,1 @@
+{"state_dim": 32, "learning_rate": 0.01, "dropout": 0.1, "batch_size": 64, "kernel_size": 3, "input_seq_length": 7}

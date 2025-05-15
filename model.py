@@ -120,10 +120,10 @@ def train_model(model, train_loader, val_loader, num_epochs,device, learning_rat
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
 
             optimizer.zero_grad()
-            tgt_input = y_batch[:, :-1, :].clone()
+            tgt_input = torch.zeros((X_batch.size(0), 1, y_batch.size(2))).to(device)
             output = model(X_batch, tgt_input)
+            loss = mse_loss(output, y_batch)
 
-            loss = mse_loss(output, y_batch[:, 1:, :])
             loss.backward()
             optimizer.step()
 
@@ -199,8 +199,8 @@ def visualisation(train_losses, val_losses, all_predictions, all_targets):
 
     for i in range(num_samples):
         plt.subplot(num_samples, 1, i + 1)
-        plt.plot(all_targets[i, :, 2], label="Actual", color="green")
-        plt.plot(all_predictions[i, :, 2], label="Predicted", linestyle="dashed", color="orange")
+        plt.plot(all_targets[:, 0, 2], label="Actual", color="green")
+        plt.plot(all_predictions[:, 0, 2], label="Predicted", linestyle="dashed", color="orange")
         plt.ylabel("Value")
         plt.legend()
         plt.title(f"Sample {i + 1}")
