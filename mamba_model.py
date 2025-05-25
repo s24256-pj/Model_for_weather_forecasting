@@ -11,6 +11,7 @@ import optuna
 import random
 import os
 import json
+import joblib
 
 class MambaBlock(nn.Module):
     def __init__(self, input_dim, state_dim, output_dim, dropout_rate, kernel_size):
@@ -87,7 +88,7 @@ def prepare_data(data, input_seq_length, output_seq_length, batch_size, target_f
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-    return train_loader, val_loader, test_loader, X, Y, scaler_target
+    return train_loader, val_loader, test_loader, X, Y, scaler_target, scaler_input
 
 
 def create_sequences(data, target, input_seq_length, output_seq_length):
@@ -160,6 +161,7 @@ def train_model(model, train_loader, val_loader, num_epochs, device, learning_ra
 def evaluate_model(model, test_loader, device):
     mse_loss = nn.MSELoss()
     model.eval()
+    test_losses = []
     with torch.no_grad():
         test_loss = 0
         all_predictions = []
@@ -169,10 +171,11 @@ def evaluate_model(model, test_loader, device):
             predictions = model(X_batch, y_batch.shape[1])
 
             loss = mse_loss(predictions, y_batch)
-            test_loss += loss.item()
+            test_losses.append(loss / len(test_loader))
+
             all_predictions.append(predictions.cpu().numpy())
             all_targets.append(y_batch.cpu().numpy())
-        print(f"Test Loss: {test_loss:.4f}")
+        print(f"Test Loss: {test_losses[-1]:.4f}")
         return test_loss, all_predictions, all_targets
 
 
@@ -315,13 +318,11 @@ def objective(trial):
 
     output_seq_length = 2
 
-    data = "weather_data_two.csv"
+    data = "weather_data_with_cover_and_elevation.csv"
     target_features = [
         "stink","no2","pm10","pm25","so2","o3","cloud_cover","wind_direction","wind_speed","temperature","humidity","pressure","precipitation"
     ]
-    train_loader, val_loader, test_loader, X, Y, scaler_target = prepare_data(
-        data, input_seq_length, output_seq_length, batch_size, target_features
-    )
+    train_loader, val_loader, test_loader, X, Y, scaler_target,scaler_input = prepare_data(data,input_seq_length,output_seq_length,batch_size,target_features)
 
     model = MambaModel(
         input_dim=X.shape[2],
@@ -337,11 +338,11 @@ def objective(trial):
 
     return test_loss
 
-def save_best_params(best_params, filename="best_params_m1.json"):
+def save_best_params(best_params, filename="best_params_m.json"):
     with open(filename, 'w') as f:
         json.dump(best_params, f)
 
-def load_best_params(filename="best_params_m1.json"):
+def load_best_params(filename="best_params_m.json"):
     if os.path.exists(filename):
         with open(filename, 'r') as f:
             return json.load(f)
@@ -352,10 +353,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    data = "weather_data_test.csv"
-    target_features = [
-        "stink","no2","pm10","pm25","so2","o3","cloud_cover","wind_direction","wind_speed","temperature","humidity","pressure","precipitation"
-    ]
+    data = "weather_data_two.csv"
+    target_features = ["stink", "no2", "pm10", "pm25", "so2", "o3", "cloud_cover", "wind_direction", "wind_speed",
+                          "temperature", "humidity", "pressure", "precipitation"]
 
     best_params = load_best_params()
 
@@ -378,7 +378,7 @@ def main():
 
     output_seq_length = 7
 
-    train_loader, val_loader, test_loader, X, Y, scaler_target = prepare_data(data,best_input_seq_length,output_seq_length,best_batch_size,target_features)
+    train_loader, val_loader, test_loader, X, Y, scaler_target,scaler_input = prepare_data(data,best_input_seq_length,output_seq_length,best_batch_size,target_features)
 
     model = MambaModel(input_dim=X.shape[2], state_dim=best_state_dim, output_dim=Y.shape[2],dropout_rate=best_dropout,kernel_size=best_kernel).to(device)
 
@@ -386,6 +386,20 @@ def main():
     test_loss, all_predictions_t, all_targets_t = evaluate_model(trained_model, test_loader, device)
     visualisation_training(train_losses, val_losses, all_predictions, all_targets, scaler_target)
     visualisation_test(all_predictions_t, all_targets_t, scaler_target,output_seq_length)
+    torch.save(model.state_dict(), "mamba_model_weights.pth")
+
+    params = {
+        "input_dim": X.shape[2],
+        "state_dim": best_state_dim,
+        "kernel_size": best_kernel,
+        "output_dim": Y.shape[2],
+        "dropout_rate": best_dropout,
+    }
+    with open("model_m_params.json", "w") as f:
+        json.dump(params, f)
+
+    joblib.dump(scaler_target, "scaler_target_m.save")
+    joblib.dump(scaler_input, "scaler_input_m.save")
 
 if __name__ == '__main__':
     main()
