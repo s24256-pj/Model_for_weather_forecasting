@@ -1,0 +1,1 @@
+{"num_heads": 2, "num_layers": 5, "embed_dim": 512, "learning_rate": 0.01, "dropout": 0.3, "dim_feedforward_encoder": 128, "dim_feedforward_decoder": 1024, "batch_size": 64, "input_seq_length": 21}
